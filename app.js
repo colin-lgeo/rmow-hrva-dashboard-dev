@@ -251,12 +251,12 @@ require([
 
   // --- UI toggles ---
 
-  const floodToggle = document.getElementById("floodToggle");
-  if (floodToggle) {
-    floodToggle.addEventListener("change", function (event) {
-      floodLayer.visible = event.target.checked;
-    });
-  }
+  // const floodToggle = document.getElementById("floodToggle");
+  // if (floodToggle) {
+  //   floodToggle.addEventListener("change", function (event) {
+  //     floodLayer.visible = event.target.checked;
+  //   });
+  // }
 
   const floodOutlineToggle = document.getElementById("floodOutlineToggle");
   if (floodOutlineToggle) {
