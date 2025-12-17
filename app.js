@@ -25,12 +25,21 @@ const FLOOD_OUTLINE_ITEM_ID   = "39c5ebf72e18404eb39e6cf8399e3f0c";
 const starburst = ["#ec8787ff", "#f9cbb3ff", "#fff0d0ff", "#b7d5d7ff", "#70b6baff"];
 // Esri color ramps - Red 1
 const reds1 = ["#f6d7e0ff", "#e6968eff", "#db6a58ff", "#a1412cff"];
+// Esri color ramps - Blue and Red 10
+const redblue10 = ["#d7191cff", "#fdae61ff", "#ffffbfff", "#abdda4ff", "#2b83baff"];
+const redblue = ["#a53217ff", "#d2987fff", "#fffee6ff", "#8897a2ff", "#10305eff"];
 
 require([
   "esri/config",
   "esri/WebMap",
   "esri/layers/ImageryTileLayer",
+  "esri/layers/ImageryLayer",
   "esri/layers/FeatureLayer",
+  "esri/renderers/RasterStretchRenderer",
+  "esri/rest/support/AlgorithmicColorRamp",
+  "esri/rest/support/MultipartColorRamp",
+  "esri/smartMapping/raster/support/colorRamps",
+  "esri/Color",
   "esri/views/MapView",
   "esri/widgets/Legend",
   "esri/widgets/ScaleBar",
@@ -39,7 +48,13 @@ require([
   esriConfig,
   WebMap,
   ImageryTileLayer,
+  ImageryLayer,
   FeatureLayer,
+  RasterStretchRenderer,
+  AlgorithmicColorRamp,
+  MultipartColorRamp,
+  colorRamps,
+  Color,
   MapView,
   Legend,
   ScaleBar,
@@ -52,10 +67,297 @@ require([
     portalItem: { id: BASEMAP_ITEM_ID }
   });
 
+
 // ============================================================================
-//                        HAZARD LAYER DEFINITIONS 
+//                          FUNCTIONS
 // ============================================================================
- 
+  // /**
+  //  * Retrieves a named Esri Color Ramp and formats it for the RasterStretchRenderer.
+  //  * @param {string} name - The name of the Esri color ramp.
+  //  * @returns {Object} A valid ColorRamp object for the renderer.
+  //  */
+  // function getEsriColorRamp(name) {
+  //     // 1. Look up the color data structure
+  //     const rampData = colorRamps.byName(name);
+
+  //     if (!rampData || !rampData.colors || rampData.colors.length === 0) {
+  //         // Fallback to a simple, manually defined algorithmic ramp if lookup fails
+  //         console.error(`Named color ramp "${name}" lookup failed. Using Blue-to-Red fallback.`);
+  //         return new AlgorithmicColorRamp({
+  //             algorithm: "cie-lab",
+  //             fromColor: new Color("#0000FF"),
+  //             toColor: new Color("#FF0000")
+  //         });
+  //     }
+      
+  //     // 2. Convert the color data into a proper ColorRamp class instance
+  //     return colorRamps.createColorRamp(rampData);
+  // }
+
+  /**
+   * Creates a MultipartColorRamp by connecting multiple AlgorithmicColorRamp segments.
+   * * @param {Array<{hex: string}>} colorHexCodes A simple array of hex color strings.
+   * @returns {MultipartColorRamp}
+   */
+  function createManualMultipartColorRamp(colorHexCodes) {
+      if (!colorHexCodes || colorHexCodes.length < 2) {
+          console.error("Multipart color ramp requires at least two colors.");
+          return null;
+      }
+
+      const ramps = [];
+
+      // We create a segment (an AlgorithmicColorRamp) between every consecutive pair of colors.
+      for (let i = 0; i < colorHexCodes.length - 1; i++) {
+          const fromColor = new Color(colorHexCodes[i]);
+          const toColor = new Color(colorHexCodes[i + 1]);
+
+          ramps.push(
+              new AlgorithmicColorRamp({
+                  // 'lab' is generally the best algorithm for smooth, visually uniform ramps
+                  algorithm: "cie-lab", 
+                  fromColor: fromColor,
+                  toColor: toColor
+              })
+          );
+      }
+
+      // The final MultipartColorRamp is composed of all the segments we created.
+      return new MultipartColorRamp({
+          colorRamps: ramps
+      });
+  }  
+
+  function createStretchRenderer(colorRamp) {
+    return new RasterStretchRenderer({
+        stretchType: "min-max", 
+        colorRamp: colorRamp,
+        dynamicRangeAdjustment: true 
+    });
+  }
+
+  // ============================================================================
+  //                        HAZARD LAYER DEFINITIONS 
+  // ============================================================================
+   
+    // ============================ SMOKE LAYER =============================
+
+  // function createMultipartColorRamp(colors) {
+  //   // Convert string colors to ArcGIS Color objects
+  //   const colorStops = colors.map((hex, index) => {
+  //       return new Color(hex);
+  //   });
+
+  //   return new AlgorithmicColorRamp({
+  //       // The ramp type determines the interpolation method. 'lab' is often smooth.
+  //       algorithm: "cie-lab", 
+  //       fromColor: colorStops[0],
+  //       toColor: colorStops[colorStops.length - 1],
+  //   });
+  // }
+
+  // function createStretchRenderer(colorRamp) {
+  //     return new RasterStretchRenderer({
+  //         // The stretchType should be set based on your raster data's distribution
+  //         // "min-max" is a common choice for elevation/single-band rasters
+  //         stretchType: "min-max", 
+  //         // You can optionally set min/max values if you know the data range
+  //         min: 0,
+  //         max: 30,
+  //         colorRamp: colorRamp,
+  //         // If your raster is single-band, you may need to specify the band index (default is 0)
+  //         // bandIds: [0] 
+  //     });
+  // }
+
+  // const smokeLayer = new ImageryTileLayer({
+  //     // Load the layer from the Portal Item ID
+  //     portalItem: {
+  //         id: SMOKE_LAYER_ITEM_ID,
+  //     },
+  //     title: "Smoke Layer"
+  // });
+
+  // const smokeRenderer = createStretchRenderer(createMultipartColorRamp(redblue10))
+
+  // const smokeRenderer = {
+  //   type: "raster-stretch",
+  //   stretchType: "standard-deviation",
+  //   numberOfStandardDeviations: 2,
+  //   statistics: [{
+  //     min: 0.0,
+  //     max: 114.0,
+  //     avg: 4.5278,
+  //     stddev: 8.9357,
+  //   }],
+  //   gamma: [0.6],
+  //   // colorRamp: {
+  //   //   type: "algorithmic",
+  //   //   fromColor: [198, 219, 239, 255], // lighter blue
+  //   //   toColor:   [  8,  48, 107, 255], // deep blue
+  //   //   algorithm: "lab-lch"
+  //   // }
+  //   colorRamp: createMultipartColorRamp(redblue10)
+  // };
+
+  const smokeLayer = new ImageryTileLayer({
+    portalItem: { id: SMOKE_LAYER_ITEM_ID },
+    // renderer: smokeRenderer,
+    opacity: 1,
+    visible: true,
+    title: "Smoke hazard"
+  });
+
+  // APPROACH: CUSTOM COLOR RAMP
+  // Wait for the layer to load to ensure rendering can happen correctly
+  // smokeLayer.load().then(() => {
+  //   // Get the specified Esri Color Ramp
+  //   // const colorRamp = getEsriColorRamp(COLOR_RAMP_NAME);
+  //   const customColorRamp = createManualMultipartColorRamp(redblue10);
+
+  //   if (customColorRamp) {
+  //         const renderer = createStretchRenderer(customColorRamp);
+  //         smokeLayer.renderer = renderer;
+  //         console.log("Successfully applied custom MultipartColorRamp.");
+  //     }
+
+  // }).catch(error => {
+  //     console.error("Error loading ImageryLayer or applying renderer:", error);
+  // });
+
+
+  const COLOR_RAMP_NAME = "Cyan to Purple"
+
+  // APROACH: NAMED COLOR RAMP
+  // Wait for the layer to load to ensure rendering can happen correctly
+  smokeLayer.load().then(() => {
+    // Get the specified Esri Color Ramp
+    const colorRamp = getEsriColorRamp(COLOR_RAMP_NAME);
+    // Create the RasterStretchRenderer
+    const renderer = new RasterStretchRenderer({
+        stretchType: "min-max", 
+        colorRamp: colorRamp,
+        // If you know the min/max of your data, you can set them here for a custom stretch
+        // outputMin: 1000, 
+        // outputMax: 3500,
+        
+        // Recommended property for better visualization
+        dynamicRangeAdjustment: true 
+    });
+    // Apply the renderer
+    smokeLayer.renderer = renderer;
+    console.log(`Successfully applied Esri ramp: ${COLOR_RAMP_NAME}`);
+
+  }).catch(error => {
+      console.error("Error loading ImageryLayer or applying renderer:", error);
+  });
+  // // Apply the renderer
+  // smokeLayer.renderer = renderer;
+
+  // console.log(`Renderer with "${COLOR_RAMP_NAME}" color ramp applied.`);
+  // }).catch(error => {
+  // console.error("Error loading ImageryLayer or applying renderer:", error);
+  // });
+
+  // const smokeRamp = {
+  //   type: "multipart",
+  //   colorRamps: [
+  //     {
+  //       type: "algorithmic",
+  //       algorithm: "cie-lab",
+  //       fromColor: redblue10[0],
+  //       toColor: redblue10[redblue10.length - 1]
+  //     }
+  //   ]
+  // };
+
+  // const smokeRenderer = {
+  //   type: "raster-stretch",
+  //   stretchType: "percent-clip",
+  //   numberOfStandardDeviations: 2,
+  //   minPercent: 0.5,
+  //   maxPercent: 99.5,
+  //   gamma: [0.6],
+  //   colorRamp: buildMultipartRamp(redblue)
+  // };
+
+  // // const smokeLayer = new ImageryTileLayer({
+  // //   portalItem: { id: SMOKE_LAYER_ITEM_ID },
+  // //   renderer: smokeRenderer,
+  // //   opacity: 0.6,
+  // //   visible: true,
+  // //   title: "Smoke hazard"
+  // // });  
+
+  // const smokeLayer = new ImageryTileLayer({
+  //   portalItem: { id: SMOKE_LAYER_ITEM_ID },
+  //   renderingRule: {
+  //     rasterFunction: "Stretch",
+  //     rasterFunctionArguments: {
+  //       StretchType: 5,        // Percent Clip
+  //       MinPercent: 2,
+  //       MaxPercent: 98,
+  //       ColorRamp: buildMultipartRamp(redblue10)
+  //     }
+  //   }
+  //   // opacity: 0.6,
+  //   // visible: true,
+  //   // title: "Smoke hazard"
+  // });
+  // function createFloatRasterRenderingRule(colors, weights, stretchType = 5, stretchParams = {}) {
+  //   function hexToRGBA(hex) {
+  //     const n = parseInt(hex.replace("#", ""), 16);
+  //     return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255];
+  //   }
+
+  //   const ramps = [];
+  //   for (let i = 0; i < colors.length - 1; i++) {
+  //     const w = weights?.[i] ?? 1;
+  //     for (let j = 0; j < w; j++) {
+  //       ramps.push({
+  //         type: "algorithmic",
+  //         algorithm: "cie-lab",
+  //         fromColor: hexToRGBA(colors[i]),
+  //         toColor: hexToRGBA(colors[i + 1])
+  //       });
+  //     }
+  //   }
+
+  //   return {
+  //     rasterFunction: "RasterStretch",
+  //     rasterFunctionArguments: {
+  //       StretchType: stretchType, // numeric code: 1, 3, 5
+  //       ColorRamp: { type: "multipart", colorRamps: ramps },
+  //       ...stretchParams
+  //     }
+  //   };
+  // }
+
+  // // Your color stops
+  // const rampColors = [
+  //   "#9e0142","#d53e4f","#f46d43","#fdae61","#fee08b",
+  //   "#e6f598","#abdda4","#66c2a5","#3288bd"
+  // ];
+
+  // // Optional weights to emphasize mid colors
+  // const rampWeights = [1,1,2,3,3,2,1,1];
+
+  // // Create rendering rule for percent-clip
+  // const myRenderingRule = createFloatRasterRenderingRule(
+  //   rampColors,
+  //   rampWeights,
+  //   "percent-clip",
+  //   { MinPercent: 2, MaxPercent: 98 }
+  // );
+
+  // // Apply to a layer
+  // const smokeLayer = new ImageryTileLayer({
+  //   portalItem: { id: SMOKE_LAYER_ITEM_ID },
+  //   renderingRule: myRenderingRule
+  // });
+
+  // webmap.add(smokeLayer);
+  // ============================ FLOOD LAYERS =============================
   // --- Flood hazard imagery: darker, opaque blue stretch ---
 
   const floodRenderer = {
@@ -106,66 +408,25 @@ require([
   });
 
   // ============================ WILDFIRE LAYERS =============================
- //  // --- Risk Threat: reds fill, thin grey outline ---
- //  const riskThreatValues = ["Low", "Moderate", "High", "Extreme"];
+  // --- Fire Break ---
+  const fuelBreaksLayer = new FeatureLayer({
+    portalItem: { id: FUELBREAKS_LAYER_ITEM_ID },
+    title: "Fuel Breaks Layer",
+    opacity: 1,
+    visible: false,
+    popupEnabled: true
+  });  
 
- // /**
- // * Function to generate the required uniqueValueInfos array dynamically.
- // * @param {Array<number|string>} values - The list of unique field values (e.g., [1, 2, 3, 4]).
- // * @param {Array<string>} colors - The list of colors corresponding to the values.
- // * @returns {Array<Object>} The array formatted for the UniqueValueRenderer.
- // */
- //  function createUniqueValueInfos(values, colors) {
- //  // Use the .map() function to iterate through the values array
- //    return values.map((value, index) => {
- //      // For each value, create the corresponding uniqueValueInfo object
- //      return {
- //        value: value, // The actual data value (e.g., 1)
- //        label: `Risk Threat ${value}`, // A label for the legend
- //        symbol: {
- //          type: "simple-fill", // Change this to "simple-marker" for points
- //          color: colors[index], // Use the color at the matching index
- //          outline: {
- //            color: [255, 255, 255, 0.5],
- //            width: 0.5
- //          }
- //        }
- //      };
- //    });
- //  }
+  // --- Fire Managed Areas ---
+  const fuelMngdLayer = new FeatureLayer({
+    portalItem: { id: FUELMNG_LAYER_ITEM_ID },
+    title: "Fuel Managed Areas Layer",
+    opacity: 1,
+    visible: false,
+    popupEnabled: true
+  });  
 
- //  // 3. Generate the uniqueValueInfos array
- //  const uniqueValueInfos = createUniqueValueInfos(riskThreatValues, reds1);
-
- //  // 4. Define the FeatureLayer Renderer using the generated array
- //  const fireRiskRenderer = {
- //    type: "unique-value",
- //    field: "Risk Threat", 
-    
- //    // *** Use the dynamically generated array here ***
- //    uniqueValueInfos: uniqueValueInfos,
-    
- //    defaultSymbol: {
- //      type: "simple-fill",
- //      color: [0, 0, 0, 0.5],
- //      outline: {
- //        color: [110, 110, 110, 1.0],
- //        width: 1
- //      }
- //    }
- //  };
-
-
- //  // 5. Define the FeatureLayer (as before)
- //  const fireRiskLayer = new FeatureLayer({
- //    portalItem: { id: RISKCLS_LAYER_ITEM_ID },
- //    renderer: fireRiskRenderer,
- //    title: "Risk Threat Assessment Layer",
- //    opacity: 1,
- //    visible: false,
- //    popupEnabled: true
- //  });  
-
+  // --- Fire Risk Class ---
   const fireRiskLayer = new FeatureLayer({
     portalItem: { id: RISKCLS_LAYER_ITEM_ID },
     title: "Wildfire Risk Layer",
@@ -174,6 +435,7 @@ require([
     popupEnabled: true
   });    
 
+  // --- Fire Threat Class ---
   const fireThreatLayer = new FeatureLayer({
     portalItem: { id: THREATCLS_LAYER_ITEM_ID },
     title: "Wildfire PSTA Threat Class",
@@ -222,7 +484,17 @@ require([
   //  - neighbourhoods
   // webmap.addMany([floodLayer, floodExtentLayer, neighbourhoodsLayer]);
   // webmap.addMany([floodLayer, floodExtentLayer, fireRiskLayer]);
-  webmap.addMany([floodLayer, floodExtentLayer, fireThreatLayer, fireRiskLayer, neighbourhoodsLayer, buildingsLayer]);
+  webmap.addMany([
+    floodLayer, 
+    floodExtentLayer, 
+    fireThreatLayer,
+    fireRiskLayer,
+    fuelMngdLayer,
+    fuelBreaksLayer,
+    smokeLayer,
+    neighbourhoodsLayer, 
+    buildingsLayer
+    ]);
 
   // --- View + widgets ---
 
@@ -278,14 +550,18 @@ require([
       webmap.reorder(buildingsLayer, webmap.layers.length - 1);      
       // Neighbourhoods on 
       webmap.reorder(neighbourhoodsLayer, webmap.layers.length - 2);
+      // Fuel breaks
+      webmap.reorder(fuelBreaksLayer, webmap.layers.length - 3);
+      // Fuel managed areas
+      webmap.reorder(fuelMngdLayer, webmap.layers.length - 4);      
       // Wildfire risk
-      webmap.reorder(fireRiskLayer, webmap.layers.length - 3);
+      webmap.reorder(fireRiskLayer, webmap.layers.length - 5);
       // Wildfire threat
-      webmap.reorder(fireThreatLayer, webmap.layers.length - 4);
+      webmap.reorder(fireThreatLayer, webmap.layers.length - 6);
       // Flood outline below neighbourhoods
-      webmap.reorder(floodExtentLayer, webmap.layers.length - 5);
+      webmap.reorder(floodExtentLayer, webmap.layers.length - 7);
       // Flood raster below both
-      webmap.reorder(floodLayer, webmap.layers.length - 6);
+      webmap.reorder(floodLayer, webmap.layers.length - 8);
     });
   });
 
@@ -303,6 +579,22 @@ require([
       neighbourhoodsLayer.visible = event.target.checked;
     });
   }
+
+  // Both fire breaks and managed areas with one toggle
+  const fuelBreakToggle = document.getElementById("fuelBreakToggle");
+  if (fuelBreakToggle) {
+    fuelBreakToggle.addEventListener("change", function (event) {
+      fuelBreaksLayer.visible = event.target.checked;
+      fuelMngdLayer.visible = event.target.checked;
+    });
+  }
+
+  // const fuelMngdToggle = document.getElementById("fuelBreakToggle");
+  // if (fuelMngdToggle) {
+  //   fuelMngdToggle.addEventListener("change", function (event) {
+  //     fuelMngdLayer.visible = event.target.checked;
+  //   });
+  // }
 
   const fireRiskToggle = document.getElementById("fireRiskToggle");
   if (fireRiskToggle) {
