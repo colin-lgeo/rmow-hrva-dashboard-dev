@@ -277,15 +277,78 @@ require([
     });
   }
 
+  // Keep this variable at the top level so all functions can access/clear it
+  let visibilityWatcher = null;
+
+  async function updateInfoPanel(item) {
+    const infoPanel = document.getElementById("infoPanel");
+    const layer = item.layers[0];
+
+    if (layer.loadStatus !== "loaded") await layer.load();
+
+    const description = layer.portalItem?.description || layer.serviceDescription || "No description available.";
+
+    // --- 1. LEGEND LOGIC ---
+    let legendHTML = "";
+    if (!layer.visible) {
+      legendHTML = `
+        <div style="padding: 10px; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 4px; color: #c53030; font-size: 0.85rem; text-align: center;">
+          <calcite-icon icon="view-hide" scale="s" style="margin-right: 5px; vertical-align: middle;"></calcite-icon>
+          Layer Hidden
+        </div>`;
+    } else if (layer.type === "imagery") {
+      legendHTML = await getRasterLegendHTML(layer);
+    } else {
+      legendHTML = `<div id="standard-legend-node"></div>`;
+    }
+
+    // --- 2. UPDATE PANEL HTML ---
+    infoPanel.heading = item.label;
+    infoPanel.innerHTML = `
+      <div style="padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="background: #f8f8f8; padding: 8px; border-radius: 4px;">
+          <calcite-label scale="s">
+            Layer Transparency
+            <calcite-slider id="layer-opacity-slider" min="0" max="100" value="${Math.round(layer.opacity * 100)}" step="1" label-handles></calcite-slider>
+          </calcite-label>
+        </div>
+        
+        <strong style="font-size: 0.9rem;">Legend</strong>
+        <div id="legend-container">${legendHTML}</div>
+
+        <hr style="opacity: 0.2; margin: 5px 0;">
+        
+        <div class="metadata-content" style="font-size: 0.9rem; line-height: 1.4;">
+          ${description}
+        </div>
+      </div>
+    `;
+
+    // --- 3. RE-ATTACH SLIDER EVENT ---
+    const slider = document.getElementById("layer-opacity-slider");
+    slider.addEventListener("calciteSliderInput", (event) => {
+      layer.opacity = event.target.value / 100;
+    });
+
+    // --- 4. INIT FEATURE LEGEND IF NEEDED ---
+    if (layer.visible && layer.type !== "imagery") {
+      new Legend({
+        view: view,
+        layerInfos: [{ layer: layer }],
+        container: "standard-legend-node"
+      });
+    }
+  }
+
   function setupInfoListeners(config) {
     const infoWrapper = document.querySelector(".info-panel");
     const infoPanel = document.getElementById("infoPanel");
 
+    // FIX: The "X" button listener - hides everything and cleans up
     infoPanel.addEventListener("calcitePanelClose", () => {
-      infoWrapper.style.display = "flex";
-      if (infoWrapper) {
-        infoWrapper.style.display = "none";
-      }
+      infoWrapper.style.display = "none";
+      if (visibilityWatcher) visibilityWatcher.remove();
+      
       document.querySelectorAll('.layer-row calcite-action').forEach(a => {
         a.active = false;
         a.classList.remove("info-active");
@@ -301,151 +364,221 @@ require([
           const isAlreadyActive = infoBtn.classList.contains("info-active");
           const layer = item.layers[0];
 
-          // Reset UI
+          // Reset all buttons first
           document.querySelectorAll('.layer-row calcite-action').forEach(a => {
             a.active = false;
             a.classList.remove("info-active");
           });
 
+          // FIX: Toggle Logic (If already blue, just close)
           if (isAlreadyActive) {
             infoWrapper.style.display = "none";
+            if (visibilityWatcher) visibilityWatcher.remove();
             return;
           }
 
-          // Ensure the layer is loaded so metadata is populated
-          if (layer.loadStatus !== "loaded") {
-            await layer.load();
-          }
-
-          // PRIORITY: 1. Portal Description -> 2. Service Description -> 3. Local Config Fallback
-          const officialDescription = 
-            layer.portalItem?.description || 
-            layer.description || 
-            layer.serviceDescription || 
-            item.info || 
-            "No description available for this layer.";
-
-          // Update Panel Content
-          infoPanel.heading = item.label;
-          infoPanel.innerHTML = `
-            <div style="padding: 15px;">
-              <div class="metadata-content" style="font-size: 0.9rem; line-height: 1.4;">
-                ${officialDescription}
-              </div>
-              <hr style="opacity: 0.2; margin: 15px 0;">
-              <strong>Legend</strong>
-              <div style="margin-top: 10px; text-align: center;">
-                 <img src="${layer.url}/legend?f=image" 
-                      style="max-width: 100%; border: 1px solid #eee;" 
-                      onerror="this.style.display='none'">
-              </div>
-            </div>
-          `;
-
-          // Set Active UI
+          // --- OPENING PANEL ---
           infoBtn.active = true;
           infoBtn.classList.add("info-active");
-          await updateInfoPanel(item); // Call the helper that uses the Legend widget
           infoWrapper.style.display = "flex";
-          infoPanel.closed = false; 
+          infoPanel.closed = false;
+
+          // Clean up previous watcher before starting a new one
+          if (visibilityWatcher) visibilityWatcher.remove();
+
+          // Initial Load
+          await updateInfoPanel(item);
+
+          // FIX: Live Legend Watcher
+          // When layer visibility changes, just re-run the update function
+          visibilityWatcher = layer.watch("visible", () => {
+            updateInfoPanel(item);
+          });
         };
       });
     });
   }
 
-  // Keep a reference to the legend widget so we can destroy/recreate it
-  // let internalLegend = null;
 
-  async function getRasterLegendHTML(layer) {
-      try {
-          const response = await fetch(`${layer.url}/legend?f=pjson`);
-          const data = await response.json();
+  // function setupInfoListeners(config) {
+  //   const infoWrapper = document.querySelector(".info-panel");
+  //   const infoPanel = document.getElementById("infoPanel");
+  //   let visibilityWatcher = null;
+
+  //   infoPanel.addEventListener("calcitePanelClose", () => {
+  //     infoWrapper.style.display = "flex";
+  //     if (infoWrapper) {
+  //       infoWrapper.style.display = "none";
+  //     }
+  //     document.querySelectorAll('.layer-row calcite-action').forEach(a => {
+  //       a.active = false;
+  //       a.classList.remove("info-active");
+  //     });
+  //   });
+
+  //   config.forEach(group => {
+  //     group.items.forEach(item => {
+  //       const infoBtn = document.getElementById(`info-${item.id}`);
+  //       if (!infoBtn) return;
+
+  //       infoBtn.onclick = async () => {
+  //         const isAlreadyActive = infoBtn.classList.contains("info-active");
+  //         const layer = item.layers[0];
+
+  //         // Reset UI
+  //         document.querySelectorAll('.layer-row calcite-action').forEach(a => {
+  //           a.active = false;
+  //           a.classList.remove("info-active");
+  //         });
+
+  //         if (isAlreadyActive) {
+  //           infoWrapper.style.display = "none";
+  //           return;
+  //         }
+
+  //         // Ensure the layer is loaded so metadata is populated
+  //         if (layer.loadStatus !== "loaded") {
+  //           await layer.load();
+  //         }
+
+  //         // PRIORITY: 1. Portal Description -> 2. Service Description -> 3. Local Config Fallback
+  //         const officialDescription = 
+  //           layer.portalItem?.description || 
+  //           layer.description || 
+  //           layer.serviceDescription || 
+  //           item.info || 
+  //           "No description available for this layer.";
+
+  //         // Update Panel Content
+  //         infoPanel.heading = item.label;
+  //         infoPanel.innerHTML = `
+  //           <div style="padding: 15px;">
+  //             <div class="metadata-content" style="font-size: 0.9rem; line-height: 1.4;">
+  //               ${officialDescription}
+  //             </div>
+  //             <hr style="opacity: 0.2; margin: 15px 0;">
+  //             <strong>Legend</strong>
+  //             <div style="margin-top: 10px; text-align: center;">
+  //                <img src="${layer.url}/legend?f=image" 
+  //                     style="max-width: 100%; border: 1px solid #eee;" 
+  //                     onerror="this.style.display='none'">
+  //             </div>
+  //           </div>
+  //         `;
+
+  //         // Set Active UI
+  //         infoBtn.active = true;
+  //         infoBtn.classList.add("info-active");
+  //         await updateInfoPanel(item); // Call the helper that uses the Legend widget
+  //         infoWrapper.style.display = "flex";
+  //         infoPanel.closed = false; 
+  //       };
+  //     });
+  //   });
+  // }
+
+  // // Keep a reference to the legend widget so we can destroy/recreate it
+  // // let internalLegend = null;
+
+  // async function getRasterLegendHTML(layer) {
+  //     try {
+  //         const response = await fetch(`${layer.url}/legend?f=pjson`);
+  //         const data = await response.json();
           
-          // Find the specific legend for this layer
-          const layerLegend = data.layers[0];
-          if (!layerLegend || !layerLegend.legend) return "Legend not available.";
+  //         // Find the specific legend for this layer
+  //         const layerLegend = data.layers[0];
+  //         if (!layerLegend || !layerLegend.legend) return "Legend not available.";
 
-          let html = `<div class="custom-raster-legend">`;
+  //         let html = `<div class="custom-raster-legend">`;
           
-          layerLegend.legend.forEach(item => {
-              // item.contentType is usually 'image/png', item.imageData is the base64 string
-              const imgSrc = `data:${item.contentType};base64,${item.imageData}`;
-              html += `
-                  <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                      <img src="${imgSrc}" style="width: 20px; height: 20px; margin-right: 10px; border: 1px solid #eee;">
-                      <span style="font-size: 0.85rem;">${item.label || ''}</span>
-                  </div>`;
-          });
+  //         layerLegend.legend.forEach(item => {
+  //             // item.contentType is usually 'image/png', item.imageData is the base64 string
+  //             const imgSrc = `data:${item.contentType};base64,${item.imageData}`;
+  //             html += `
+  //                 <div style="display: flex; align-items: center; margin-bottom: 4px;">
+  //                     <img src="${imgSrc}" style="width: 20px; height: 20px; margin-right: 10px; border: 1px solid #eee;">
+  //                     <span style="font-size: 0.85rem;">${item.label || ''}</span>
+  //                 </div>`;
+  //         });
 
-          html += `</div>`;
-          return html;
-      } catch (err) {
-          console.error("Manual legend fetch failed:", err);
-          return "Unable to load legend.";
-      }
-  }
+  //         html += `</div>`;
+  //         return html;
+  //     } catch (err) {
+  //         console.error("Manual legend fetch failed:", err);
+  //         return "Unable to load legend.";
+  //     }
+  // }
 
-  async function updateInfoPanel(item) {
-      const infoPanel = document.getElementById("infoPanel");
-      const layer = item.layers[0];
+  // async function updateInfoPanel(item) {
+  //     const infoPanel = document.getElementById("infoPanel");
+  //     const layer = item.layers[0];
 
-      if (layer.loadStatus !== "loaded") await layer.load();
+  //     if (layer.loadStatus !== "loaded") await layer.load();
 
-      const description = layer.portalItem?.description || layer.serviceDescription || "No description available.";
-      const legendHTML = layer.type === "imagery" ? await getRasterLegendHTML(layer) : `<div id="standard-legend-node"></div>`;
+  //     const description = layer.portalItem?.description || layer.serviceDescription || "No description available.";
       
-      // Build the legend HTML (Manual for Imagery, or standard for Feature)
-      // let legendHTML = "";
-      // if (layer.type === "imagery") {
-      //     legendHTML = await getRasterLegendHTML(layer);
-      // } else {
-      //     // Fallback placeholder for non-raster layers
-      //     legendHTML = `<div id="standard-legend-node"></div>`;
-      // }
+  //     // --- LEGEND LOGIC START ---
+  //     // const legendHTML = layer.type === "imagery" ? await getRasterLegendHTML(layer) : `<div id="standard-legend-node"></div>`;
+  //     let legendHTML = "";
+      
+  //     if (!layer.visible) {
+  //         // 1. If the layer is off, show the "Layer Hidden" message
+  //         legendHTML = `
+  //             <div style="padding: 10px; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 4px; color: #c53030; font-size: 0.85rem; text-align: center;">
+  //                 <calcite-icon icon="view-hide" scale="s" style="margin-right: 5px; vertical-align: middle;"></calcite-icon>
+  //                 Layer Hidden
+  //             </div>`;
+  //     } else if (layer.type === "imagery") {
+  //         // 2. If it's on and Imagery, fetch the manual legend
+  //         legendHTML = await getRasterLegendHTML(layer);
+  //     } else {
+  //         // 3. If it's on and Feature, prepare the widget node
+  //         legendHTML = `<div id="standard-legend-node"></div>`;
+  //     }
 
-      infoPanel.heading = item.label;
-      infoPanel.innerHTML = `
-              <div style="margin-bottom: 1px; background: #f8f8f8; padding: 1px; border-radius: 4px;">
-                  <calcite-label scale="s">
-                      Layer Transparency
-                      <calcite-slider 
-                          id="layer-opacity-slider" 
-                          min="0" max="100" 
-                          value="${Math.round(layer.opacity * 100)}" 
-                          step="1" 
-                          label-handles>
-                      </calcite-slider>
-                  </calcite-label>
-              </div>
-              <div style="padding: 15px; display: flex; flex-direction: column; gap: 15px;">
-              <strong style="font-size: 0.9rem;">Legend</strong>
-              <div style="margin-top: 10px;">
-                  ${legendHTML}
-              </div>
+  //     infoPanel.heading = item.label;
+  //     infoPanel.innerHTML = `
+  //             <div style="margin-bottom: 1px; background: #f8f8f8; padding: 1px; border-radius: 4px;">
+  //                 <calcite-label scale="s">
+  //                     Layer Transparency
+  //                     <calcite-slider 
+  //                         id="layer-opacity-slider" 
+  //                         min="0" max="100" 
+  //                         value="${Math.round(layer.opacity * 100)}" 
+  //                         step="1" 
+  //                         label-handles>
+  //                     </calcite-slider>
+  //                 </calcite-label>
+  //             </div>
+  //             <div style="padding: 15px; display: flex; flex-direction: column; gap: 15px;">
+  //             <strong style="font-size: 0.9rem;">Legend</strong>
+  //             <div style="margin-top: 10px;">
+  //                 ${legendHTML}
+  //             </div>
 
-              <hr style="opacity: 0.2; margin: 15px 0;">
-              <div class="metadata-content" style="max-height: 250px;">
-                  ${description}
-              </div>
-          </div>
-      `;
+  //             <hr style="opacity: 0.2; margin: 15px 0;">
+  //             <div class="metadata-content" style="max-height: 250px;">
+  //                 ${description}
+  //             </div>
+  //         </div>
+  //     `;
 
-      // 2. Attach the Slider Event Listener
-      const slider = document.getElementById("layer-opacity-slider");
-      slider.addEventListener("calciteSliderChange", (event) => {
-          // ArcGIS opacity is 0-1, Slider is 0-100
-          layer.opacity = event.target.value / 100;
-      });
+  //     // 2. Attach the Slider Event Listener
+  //     const slider = document.getElementById("layer-opacity-slider");
+  //     slider.addEventListener("calciteSliderChange", (event) => {
+  //         // ArcGIS opacity is 0-1, Slider is 0-100
+  //         layer.opacity = event.target.value / 100;
+  //     });
 
-      // If it's a feature layer, we can still use the widget if you prefer
-      if (layer.type !== "imagery") {
-          new Legend({
-              view: view,
-              layerInfos: [{ layer: layer }],
-              container: "standard-legend-node"
-          });
-      }
-  }
+  //     // If it's a feature layer, we can still use the widget if you prefer
+  //     // if (layer.type !== "imagery") {
+  //     //     new Legend({
+  //     //         view: view,
+  //     //         layerInfos: [{ layer: layer }],
+  //     //         container: "standard-legend-node"
+  //     //     });
+  //     // }
+  // }
 
 // async function updateInfoPanel(item) {
 //     const infoPanel = document.getElementById("infoPanel");
