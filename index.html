@@ -123,6 +123,36 @@
       color: var(--muted);
     }
 
+    .info-panel {
+      position: absolute;
+      right: 1.1rem;
+      top: 1.1rem;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.8rem;
+      border-radius: 0.4rem;
+      font-size: 0.85rem;
+      backdrop-filter: blur(2px);
+      max-height: 60vh;
+      max-width: 40vh;
+      display: none; /* Controlled by JS */
+      flex-direction: column;
+    }
+
+    #infoPanel {
+      height: 100%;     /* Force panel to fill the 60vh wrapper */
+      overflow: hidden; /* Prevent the panel itself from leaking */
+      display: flex,
+      flex-direction: colmn,
+    /* This targets the internal scrollable area of the Calcite Panel */
+      --calcite-panel-content-height: auto;
+      --calcite-shell-panel-width: 100%;
+    }
+
+    #infoPanel ::part(content-wrapper) {
+      overflow-y: auto;
+    }
+
     .toggle-row {
       display: flex;
       flex-direction: column;
@@ -211,10 +241,15 @@
       width: 18px;
     }
 
-    /* If the checkbox still feels 1px off, you can nudge it */
+    .layer-row calcite-action.info-active {
+      --calcite-ui-icon-color: #007ac2 !important; /* Forces the blue color */
+    }
+
     calcite-checkbox {
       vertical-align: middle;
     }
+
+ 
   </style>
 </head>
 <body>
@@ -235,13 +270,40 @@
 
   <main class="layout">
     <div id="viewDiv"></div>
+
+    <div class="info-panel">
+      <calcite-panel heading="Layer Details" id="infoPanel" closable>
+      </calcite-panel>
+    </div> 
+
+<!--     <div id="info-widget-container">
+      <div class="info-header">
+         <calcite-action id="close-info" icon="x" scale="s" text="Close" style="float:right"></calcite-action>
+      </div>
+      <div id="feature-widget-node"></div>
+    </div> -->
+
+    <!-- Info panel (populates with info from the web map) -->
+<!--     <calcite-panel heading="Details" data-panel-id="information" closable>
+      <div id="info-content">
+        <img id="item-thumbnail" alt="webmap thumbnail" />
+        <div id="item-description"> -->
+          <!-- Dynamically populated -->
+<!--         </div>
+      </div>
+    </calcite-panel>  -->  
+
     <div class="corner-panel">
-      <calcite-panel heading="Layer Controls">
+      <calcite-panel heading="Layer Controls" id="layerPanel" collapsible>
+      </calcite-panel>
+    </div>    
+
+
         
-        <calcite-accordion>
+        <!-- <calcite-accordion>  -->
 
           <!-- Whistler basemap overlay -->
-          <calcite-accordion-item heading="RMOW Basemap" description="Municipality layers" expanded>
+ <!--          <calcite-accordion-item heading="RMOW Basemap" description="Municipality layers" expanded>
             <calcite-label layout="inline">
               <calcite-checkbox id="buildingsToggle" checked></calcite-checkbox>
               Building Footprints
@@ -250,18 +312,18 @@
               <calcite-checkbox id="neighbourhoodsToggle" checked></calcite-checkbox>
               Neighbourhoods
             </calcite-label>
-          </calcite-accordion-item>
+          </calcite-accordion-item> -->
 
           <!-- Smoke -->
-          <calcite-accordion-item heading="Air Quality">
+<!--           <calcite-accordion-item heading="Air Quality">
             <calcite-label layout="inline">
               <calcite-checkbox id="smokeToggle"></calcite-checkbox>
               3-year Smoke PM2.5 Exceedance Days
             </calcite-label>
-          </calcite-accordion-item>
+          </calcite-accordion-item> -->
 
           <!-- Landslide -->
-          <calcite-accordion-item heading="Landslide">
+<!--           <calcite-accordion-item heading="Landslide">
             <calcite-label layout="inline">
               <calcite-checkbox id="rockfallToggle"></calcite-checkbox>
               Rockfall Susceptibility
@@ -271,9 +333,9 @@
               Debris Flow Susceptibility
             </calcite-label>
           </calcite-accordion-item>
-
+ -->
           <!-- Wildfire -->
-          <calcite-accordion-item heading="Wildfire">
+<!--           <calcite-accordion-item heading="Wildfire">
             <calcite-label layout="inline">
               <calcite-checkbox id="fuelBreakToggle"></calcite-checkbox>
               Fuel Breaks and Fire Managed Areas
@@ -286,18 +348,18 @@
               <calcite-checkbox id="fireThreatToggle"></calcite-checkbox>
               WUI Fire Threat Class ≥ 6
             </calcite-label>
-          </calcite-accordion-item>
+          </calcite-accordion-item> -->
 
           <!-- Extreme Heat -->
-          <calcite-accordion-item heading="Extreme Heat">
+<!--           <calcite-accordion-item heading="Extreme Heat">
             <calcite-label layout="inline">
               <calcite-checkbox id="lstToggle"></calcite-checkbox>
               Extreme Heat hazard
             </calcite-label>
-          </calcite-accordion-item>
+          </calcite-accordion-item> -->
 
           <!-- Drought -->
-          <calcite-accordion-item heading="Water Scarcity & Drought">
+<!--           <calcite-accordion-item heading="Water Scarcity & Drought">
             <div class="layer-row">
               <calcite-action icon="information" id="info-raster1" text="More Info" appearance="transparent" scale="s"></calcite-action>
 
@@ -311,10 +373,10 @@
               </calcite-tooltip>
 
             </div>
-          </calcite-accordion-item>
+          </calcite-accordion-item> -->
 
           <!-- Flood -->
-          <calcite-accordion-item heading="Flooding" expanded>
+<!--           <calcite-accordion-item heading="Flooding" expanded>
             <calcite-label layout="inline">
               <calcite-checkbox id="dikesToggle" checked></calcite-checkbox>
               Flood Protection Dikes
@@ -327,7 +389,7 @@
 
 
       </calcite-panel>
-    </div>    
+    </div>     -->
 
     <!-- Simple html corner panel -->
 <!--     <section class="corner-panel">

@@ -34,13 +34,12 @@ const redblue = ["#a53217ff", "#d2987fff", "#fffee6ff", "#8897a2ff", "#10305eff"
 const inferno = ["#520d8eff", "#bc2e9aff", "#ff5c6aff", "#ffb71bff", "#ffff64ff"];
 
 const rockfall = ["#f9eedd00", "#dea183ff", "#cd7C58ff", "#ba5632ff"]
-// const rockfall_positions = [0, 0.5, 0.75, 1.0]
-const debris = ["#a297b300", "#9f8cbdff", "#9b81c6ff", "#9876d0ff", "#946bd9ff", "#9060cfff", "#8d55ecff", "#894af6ff", "#853fffff", "#a46fbfff", "#c29f80ff", "#e0cf40ff", "#ffff00ff"];
-
+// const debris = ["#a297b300", "#9f8cbdff", "#9b81c6ff", "#9876d0ff", "#946bd9ff", "#9060cfff", "#8d55ecff", "#894af6ff", "#853fffff", "#a46fbfff", "#c29f80ff", "#e0cf40ff", "#ffff00ff"];
+// Esri color ramps - Viridis
+// const debris = ["#6730a4ff", "#6058beff", "#507dc9ff", "#419ecbff", "#35bdcbff", "#2cdcc6ff", "#3bfbb6ff", "#6fff99ff", "#b9ff6eff", "#ffff37ff"];
+const debris = ["#44015400", "#48247540", "#41448780", "#355f8dbf", "#2a788eff", "#21918cff", "#22a884ff", "#44bf70ff", "#7ad151ff", "#bddf26ff", "#fde725ff"];
 const dry = ["#543005ff", "#8c510aff", "#bf812dff", "#dfc27dff", "#f6e8c3ff", "#f5f5f500", "#c7eae5ff", "#80cdc1ff", "#35978fff", "#01665eff", "#003c30ff"];
-// const dry = []
-// const dry = ["#018571ff", "#80cdc1ff", "#deefedff", "#f5f5f500", "#f5efdcff", "#dfc27dff", "#a6611aff"]
-// const dry_positions = [0, 0.25, 0.45, 0.5, 0.55, 0.75, 1.0]
+
 
 require([
   "esri/config",
@@ -56,7 +55,8 @@ require([
   "esri/views/MapView",
   "esri/widgets/Legend",
   "esri/widgets/ScaleBar",
-  "esri/widgets/Expand"
+  "esri/widgets/Expand",
+  "esri/widgets/Feature"
 ], function (
   esriConfig,
   WebMap,
@@ -71,7 +71,8 @@ require([
   MapView,
   Legend,
   ScaleBar,
-  Expand
+  Expand,
+  Feature
 ) {
   // esriConfig.apiKey = "YOUR_API_KEY"; // only if you later add secured content
 
@@ -201,6 +202,297 @@ require([
           dynamicRangeAdjustment: false // Recommended to be false for consistent percentage clips
       });
   }
+
+  /**
+   * Creates the html setup for the corner panel for all layers in the config.
+   * @param {object} config - layer config
+   * @param {string} containderId - HTML id for the corner calcite panel.
+   * @returns {RasterStretchRenderer}
+   */
+  function renderLayerControls(config, containerId) {
+    const container = document.getElementById(containerId);
+    let html = `<calcite-accordion>`;
+
+    config.forEach(group => {
+      const isGroupVisible = group.items.some(item => {
+        // Check the layer objects for visibility, expand accordion if so
+        return item.layers.some(layer => layer && layer.visible === true);
+      });
+
+      const expanded = isGroupVisible ? " expanded" : "";
+      // console.log(`Group: ${group.category}, isVisible: ${isGroupVisible}, expanded: ${expanded}`)
+
+      html += `<calcite-accordion-item heading="${group.category}"${expanded}>`;
+      
+      group.items.forEach(item => {
+        let layerVis = item.layers.some(layer => layer && layer.visible === true);
+        let checked = layerVis ? " checked" : "";
+        // -- Adds hover tooltip in panel ---
+        // html += `
+        //   <div class="layer-row">
+        //     <calcite-action icon="information" id="info-${item.id}" text="More Info" appearance="transparent" scale="s"></calcite-action>
+        //     <calcite-label layout="inline">
+        //       <calcite-checkbox id="${item.id}"${checked}></calcite-checkbox>
+        //       ${item.label}
+        //     </calcite-label>
+        //     <calcite-tooltip reference-element="info-${item.id}" placement="top">
+        //       ${item.info}
+        //     </calcite-tooltip>
+        //   </div>`;
+        // -- Removed hover tool tip - will be popup panel only
+        html += `
+          <div class="layer-row">
+            <calcite-action icon="information" id="info-${item.id}" text="More Info" appearance="transparent" scale="s"></calcite-action>
+            <calcite-label layout="inline">
+              <calcite-checkbox id="${item.id}"${checked}></calcite-checkbox>
+              ${item.label}
+            </calcite-label>
+          </div>`;
+      });
+
+      html += `</calcite-accordion-item>`;
+    });
+
+    html += `</calcite-accordion>`;
+    container.innerHTML = html;
+
+    // After injecting HTML, bind your events
+    setupVisibilityListeners(config);
+  }
+
+  // Manages UI visibility and toggles
+  function setupVisibilityListeners(config) {
+    config.forEach(group => {
+      group.items.forEach(item => {
+        const checkbox = document.getElementById(item.id);
+        if (checkbox) {
+          checkbox.addEventListener("calciteCheckboxChange", (event) => {
+            const isVisible = event.target.checked;
+            item.layers.forEach(lyr => {
+              if (lyr) lyr.visible = isVisible;
+            });
+          });
+        }
+      });
+    });
+  }
+
+  function setupInfoListeners(config) {
+    const infoWrapper = document.querySelector(".info-panel");
+    const infoPanel = document.getElementById("infoPanel");
+
+    infoPanel.addEventListener("calcitePanelClose", () => {
+      infoWrapper.style.display = "flex";
+      if (infoWrapper) {
+        infoWrapper.style.display = "none";
+      }
+      document.querySelectorAll('.layer-row calcite-action').forEach(a => {
+        a.active = false;
+        a.classList.remove("info-active");
+      });
+    });
+
+    config.forEach(group => {
+      group.items.forEach(item => {
+        const infoBtn = document.getElementById(`info-${item.id}`);
+        if (!infoBtn) return;
+
+        infoBtn.onclick = async () => {
+          const isAlreadyActive = infoBtn.classList.contains("info-active");
+          const layer = item.layers[0];
+
+          // Reset UI
+          document.querySelectorAll('.layer-row calcite-action').forEach(a => {
+            a.active = false;
+            a.classList.remove("info-active");
+          });
+
+          if (isAlreadyActive) {
+            infoWrapper.style.display = "none";
+            return;
+          }
+
+          // Ensure the layer is loaded so metadata is populated
+          if (layer.loadStatus !== "loaded") {
+            await layer.load();
+          }
+
+          // PRIORITY: 1. Portal Description -> 2. Service Description -> 3. Local Config Fallback
+          const officialDescription = 
+            layer.portalItem?.description || 
+            layer.description || 
+            layer.serviceDescription || 
+            item.info || 
+            "No description available for this layer.";
+
+          // Update Panel Content
+          infoPanel.heading = item.label;
+          infoPanel.innerHTML = `
+            <div style="padding: 15px;">
+              <div class="metadata-content" style="font-size: 0.9rem; line-height: 1.4;">
+                ${officialDescription}
+              </div>
+              <hr style="opacity: 0.2; margin: 15px 0;">
+              <strong>Legend</strong>
+              <div style="margin-top: 10px; text-align: center;">
+                 <img src="${layer.url}/legend?f=image" 
+                      style="max-width: 100%; border: 1px solid #eee;" 
+                      onerror="this.style.display='none'">
+              </div>
+            </div>
+          `;
+
+          // Set Active UI
+          infoBtn.active = true;
+          infoBtn.classList.add("info-active");
+          await updateInfoPanel(item); // Call the helper that uses the Legend widget
+          infoWrapper.style.display = "flex";
+          infoPanel.closed = false; 
+        };
+      });
+    });
+  }
+
+  // Keep a reference to the legend widget so we can destroy/recreate it
+  // let internalLegend = null;
+
+  async function getRasterLegendHTML(layer) {
+      try {
+          const response = await fetch(`${layer.url}/legend?f=pjson`);
+          const data = await response.json();
+          
+          // Find the specific legend for this layer
+          const layerLegend = data.layers[0];
+          if (!layerLegend || !layerLegend.legend) return "Legend not available.";
+
+          let html = `<div class="custom-raster-legend">`;
+          
+          layerLegend.legend.forEach(item => {
+              // item.contentType is usually 'image/png', item.imageData is the base64 string
+              const imgSrc = `data:${item.contentType};base64,${item.imageData}`;
+              html += `
+                  <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                      <img src="${imgSrc}" style="width: 20px; height: 20px; margin-right: 10px; border: 1px solid #eee;">
+                      <span style="font-size: 0.85rem;">${item.label || ''}</span>
+                  </div>`;
+          });
+
+          html += `</div>`;
+          return html;
+      } catch (err) {
+          console.error("Manual legend fetch failed:", err);
+          return "Unable to load legend.";
+      }
+  }
+
+  async function updateInfoPanel(item) {
+      const infoPanel = document.getElementById("infoPanel");
+      const layer = item.layers[0];
+
+      if (layer.loadStatus !== "loaded") await layer.load();
+
+      const description = layer.portalItem?.description || layer.serviceDescription || "No description available.";
+      const legendHTML = layer.type === "imagery" ? await getRasterLegendHTML(layer) : `<div id="standard-legend-node"></div>`;
+      
+      // Build the legend HTML (Manual for Imagery, or standard for Feature)
+      // let legendHTML = "";
+      // if (layer.type === "imagery") {
+      //     legendHTML = await getRasterLegendHTML(layer);
+      // } else {
+      //     // Fallback placeholder for non-raster layers
+      //     legendHTML = `<div id="standard-legend-node"></div>`;
+      // }
+
+      infoPanel.heading = item.label;
+      infoPanel.innerHTML = `
+              <div style="margin-bottom: 1px; background: #f8f8f8; padding: 1px; border-radius: 4px;">
+                  <calcite-label scale="s">
+                      Layer Transparency
+                      <calcite-slider 
+                          id="layer-opacity-slider" 
+                          min="0" max="100" 
+                          value="${Math.round(layer.opacity * 100)}" 
+                          step="1" 
+                          label-handles>
+                      </calcite-slider>
+                  </calcite-label>
+              </div>
+              <div style="padding: 15px; display: flex; flex-direction: column; gap: 15px;">
+              <strong style="font-size: 0.9rem;">Legend</strong>
+              <div style="margin-top: 10px;">
+                  ${legendHTML}
+              </div>
+
+              <hr style="opacity: 0.2; margin: 15px 0;">
+              <div class="metadata-content" style="max-height: 250px;">
+                  ${description}
+              </div>
+          </div>
+      `;
+
+      // 2. Attach the Slider Event Listener
+      const slider = document.getElementById("layer-opacity-slider");
+      slider.addEventListener("calciteSliderChange", (event) => {
+          // ArcGIS opacity is 0-1, Slider is 0-100
+          layer.opacity = event.target.value / 100;
+      });
+
+      // If it's a feature layer, we can still use the widget if you prefer
+      if (layer.type !== "imagery") {
+          new Legend({
+              view: view,
+              layerInfos: [{ layer: layer }],
+              container: "standard-legend-node"
+          });
+      }
+  }
+
+// async function updateInfoPanel(item) {
+//     const infoPanel = document.getElementById("infoPanel");
+//     const layer = item.layers[0];
+
+//     if (layer.loadStatus !== "loaded") await layer.load();
+
+//     const description = layer.portalItem?.description || layer.serviceDescription || "No description.";
+//     const legendHTML = layer.type === "imagery" ? await getRasterLegendHTML(layer) : `<div id="standard-legend-node"></div>`;
+
+//     infoPanel.heading = item.label;
+    
+//     // Inject Slider + Description + Legend
+//     infoPanel.innerHTML = `
+//         <div style="padding: 15px;">
+//             <div style="margin-bottom: 20px; background: #f8f8f8; padding: 10px; border-radius: 4px;">
+//                 <calcite-label scale="s">
+//                     Layer Transparency
+//                     <calcite-slider 
+//                         id="layer-opacity-slider" 
+//                         min="0" max="100" 
+//                         value="${Math.round(layer.opacity * 100)}" 
+//                         step="1" 
+//                         label-handles>
+//                     </calcite-slider>
+//                 </calcite-label>
+//             </div>
+
+//             <div class="metadata-content" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;">
+//                 ${description}
+//             </div>
+            
+//             <hr style="opacity: 0.2; margin: 15px 0;">
+//             <strong style="font-size: 0.9rem;">Legend</strong>
+//             <div style="margin-top: 10px;">${legendHTML}</div>
+//         </div>
+//     `;
+
+
+
+//     // Handle standard legend if not imagery
+//     if (layer.type !== "imagery") {
+//         new Legend({ view: view, layerInfos: [{ layer: layer }], container: "standard-legend-node" });
+//     }
+// }
+
+
   // ============================================================================
   //                        HAZARD LAYER DEFINITIONS 
   // ============================================================================
@@ -257,7 +549,7 @@ require([
   // ============================ DEBRIS FLOW LAYER =============================
   const debrisLayer = new ImageryTileLayer({
     portalItem: { id: DEBRISF_LAYER_ITEM_ID },
-    opacity: 0.8,
+    opacity: 0.9,
     visible: false,
     title: "Rockfall hazard"
   });
@@ -269,7 +561,8 @@ require([
     const debrisColorRamp = createManualMultipartColorRamp(debris);
 
     if (debrisColorRamp) {
-          const debrisRenderer = createPercentClipRenderer(50, 0.5, debrisColorRamp);
+          // const debrisRenderer = createPercentClipRenderer(50, 0.5, debrisColorRamp);
+      const debrisRenderer = createMinMaxRenderer(0.3, 1.0, debrisColorRamp);
           debrisLayer.renderer = debrisRenderer;
           console.log("Successfully applied custom MultipartColorRamp.");
       }
@@ -411,6 +704,8 @@ require([
     visible: false,
     popupEnabled: true
   }); 
+
+
 // ============================================================================
 //                        BASEMAP LAYER DEFINITIONS 
 // ============================================================================
@@ -443,6 +738,7 @@ require([
     popupEnabled: true
   });
 
+
 // ============================================================================
 //                        Build layers and toggles
 // ============================================================================
@@ -464,6 +760,7 @@ require([
     floodExtentLayer,
     floodLayer, 
     ];
+
   webmap.addMany(layerOrder);
 
   // --- View + widgets ---
@@ -481,14 +778,14 @@ require([
   });
 
   view.when().then(function () {
-    const legend = new Legend({ view });
-    const legendExpand = new Expand({
-      view,
-      content: legend,
-      expanded: false,
-      expandTooltip: "Legend"
-    });
-    view.ui.add(legendExpand, "top-left");
+    // const legend = new Legend({ view });
+    // const legendExpand = new Expand({
+    //   view,
+    //   content: legend,
+    //   expanded: false,
+    //   expandTooltip: "Legend"
+    // });
+    // view.ui.add(legendExpand, "top-left");
 
     // -------- Scale Bar -------
     const scaleBar = new ScaleBar({
@@ -513,7 +810,6 @@ require([
       console.error("Flood layer failed to load:", error);
     });
 
-
     // -------- Optional: explicitly confirm ordering -------
     webmap.when().then(function () {
       layerOrder.forEach((layer, index) => {
@@ -526,34 +822,57 @@ require([
 
   // --- UI toggles ---
   const uiMappings = [
-    { id: "buildingsToggle", layers: [buildingsLayer] },
-    { id: "neighbourhoodsToggle", layers: [neighbourhoodsLayer] },
-    { id: "smokeToggle", layers: [smokeLayer] },
-    { id: "rockfallToggle", layers: [rockfallLayer]},
-    { id: "debrisToggle", layers: [debrisLayer]},
-    { id: "fuelBreakToggle", layers: [fuelBreaksLayer, fuelMngdLayer]},
-    { id: "fireRiskToggle", layers: [fireRiskLayer]},
-    { id: "fireThreatToggle", layers: [fireThreatLayer]},
-    { id: "lstToggle", layers: [lstLayer]},
-    { id: "ndviToggle", layers: [ndviLayer]},
-    { id: "dikesToggle", layers: [dikesLayer]},
-    { id: "floodToggle", layers: [floodLayer,floodExtentLayer]}
+    {
+      category: "RMOW Basemap",
+      items: [
+        { id: "buildingsToggle", layers: [buildingsLayer], label: "Building Footprints", info: "B" },
+        { id: "neighbourhoodsToggle", layers: [neighbourhoodsLayer], label: "Neighbourhoods", info: "N" },
+      ]
+    },
+    {
+      category: "Air Quality",
+      items: [
+        { id: "smokeToggle", layers: [smokeLayer], label: "3-year Smoke PM2.5 Exceedance Days", info: "S" },
+      ]
+    },
+    {
+      category: "Landslide",
+      items: [
+        { id: "rockfallToggle", layers: [rockfallLayer], label: "Rockfall Susceptibility", info: ""},
+        { id: "debrisToggle", layers: [debrisLayer], label: "Debris Flow Susceptibility", info: ""},
+      ]
+    },
+    {
+      category: "Wildfire",
+      items: [
+        { id: "fuelBreakToggle", layers: [fuelBreaksLayer, fuelMngdLayer], label: "Fuel Breaks and Fire Managed Areas", info: ""},
+        { id: "fireRiskToggle", layers: [fireRiskLayer], label: "Wildfire Risk Class ≥ Moderate", info: ""},
+        { id: "fireThreatToggle", layers: [fireThreatLayer], label: "WUI Fire Threat Class ≥ 6", info: ""},
+      ]
+    },
+    {
+      category: "Extreme Heat",
+      items: [
+        { id: "lstToggle", layers: [lstLayer], label: "Extreme Heat hazard", info: ""},
+      ]
+    },
+    {
+      category: "Drought",
+      items: [
+        { id: "ndviToggle", layers: [ndviLayer], label: "Drought Susceptibility", info: "NDVI Anomaly"},
+      ]
+    },
+    {
+      category: "Flooding",
+      items: [
+        { id: "dikesToggle", layers: [dikesLayer], label: "Flood Protection Dikes", info: ""},
+        { id: "floodToggle", layers: [floodLayer,floodExtentLayer], label: "Flood hazard", info: ""}
+      ]
+    },
   ];  
 
-  uiMappings.forEach(mapping => {
-    const element = document.getElementById(mapping.id);
-    
-    if (element) {
-        element.addEventListener("calciteCheckboxChange", function (event) {
-        const isVisible = event.target.checked;
-        
-        // Loop through all layers associated with this specific toggle
-        mapping.layers.forEach(layer => {
-          if (layer) {
-            layer.visible = isVisible;
-          }
-        });
-      });
-    }
-  });
+
+  renderLayerControls(uiMappings, "layerPanel")
+  setupInfoListeners(uiMappings)
+
 });
