@@ -18,6 +18,7 @@ const RISKCLS_LAYER_ITEM_ID   = "1533a455f7e84c4d916c951a155f797d";
 const THREATCLS_LAYER_ITEM_ID = "006ca2c7ecb2464d9b14eeafa1ea1bbc";
 const FLOOD_LAYER_ITEM_ID     = "c14e543a2a8944b6aba17b589e2d532b";
 const NEIGHBOURHOOD_ITEM_ID   = "eaaf9354f8ce4c8588e29f1137667cde"; // sublayer 12
+const DIKES_LAYER_ITEM_ID     = "6ce26b152302474281495a081ee7e4b0";
 const FLOOD_OUTLINE_ITEM_ID   = "39c5ebf72e18404eb39e6cf8399e3f0c";
 
 // --- colour map definitions --- 
@@ -29,7 +30,17 @@ const reds1 = ["#f6d7e0ff", "#e6968eff", "#db6a58ff", "#a1412cff"];
 const redblue10 = ["#d7191cff", "#fdae61ff", "#ffffbfff", "#abdda4ff", "#2b83baff"];
 const bluered10 = ["#2b83baff", "#abdda4ff", "#ffffbfff", "#fdae61ff", "#d7191cff"  ];
 const redblue = ["#a53217ff", "#d2987fff", "#fffee6ff", "#8897a2ff", "#10305eff"];
-const inferno = ["#010005ff", "#1c0f4bff", "#520d8eff", "#881b9eff", "#bc2e9aff", "#f04188ff", "#ff5c6aff", "#ff8345ff", "#ffb71bff", "#fff415ff", "#ffff64ff", "#ffffe1ff", "#ffffebff"];
+// const inferno = ["#010005ff", "#1c0f4bff", "#520d8eff", "#881b9eff", "#bc2e9aff", "#f04188ff", "#ff5c6aff", "#ff8345ff", "#ffb71bff", "#fff415ff", "#ffff64ff", "#ffffe1ff", "#ffffebff"];
+const inferno = ["#520d8eff", "#bc2e9aff", "#ff5c6aff", "#ffb71bff", "#ffff64ff"];
+
+const rockfall = ["#f9eedd00", "#dea183ff", "#cd7C58ff", "#ba5632ff"]
+// const rockfall_positions = [0, 0.5, 0.75, 1.0]
+const debris = ["#a297b300", "#9f8cbdff", "#9b81c6ff", "#9876d0ff", "#946bd9ff", "#9060cfff", "#8d55ecff", "#894af6ff", "#853fffff", "#a46fbfff", "#c29f80ff", "#e0cf40ff", "#ffff00ff"];
+
+const dry = ["#543005ff", "#8c510aff", "#bf812dff", "#dfc27dff", "#f6e8c3ff", "#f5f5f500", "#c7eae5ff", "#80cdc1ff", "#35978fff", "#01665eff", "#003c30ff"];
+// const dry = []
+// const dry = ["#018571ff", "#80cdc1ff", "#deefedff", "#f5f5f500", "#f5efdcff", "#dfc27dff", "#a6611aff"]
+// const dry_positions = [0, 0.25, 0.45, 0.5, 0.55, 0.75, 1.0]
 
 require([
   "esri/config",
@@ -97,48 +108,6 @@ require([
   //     return colorRamps.createColorRamp(rampData);
   // }
 
-  // /**
-  //  * Creates a MultipartColorRamp by connecting multiple AlgorithmicColorRamp segments.
-  //  * * @param {Array<{hex: string}>} colorHexCodes A simple array of hex color strings.
-  //  * @returns {MultipartColorRamp}
-  //  */
-  // function createManualMultipartColorRamp(colorHexCodes) {
-  //     if (!colorHexCodes || colorHexCodes.length < 2) {
-  //         console.error("Multipart color ramp requires at least two colors.");
-  //         return null;
-  //     }
-
-  //     const ramps = [];
-
-  //     // We create a segment (an AlgorithmicColorRamp) between every consecutive pair of colors.
-  //     for (let i = 0; i < colorHexCodes.length - 1; i++) {
-  //         const fromColor = new Color(colorHexCodes[i]);
-  //         const toColor = new Color(colorHexCodes[i + 1]);
-
-  //         ramps.push(
-  //             new AlgorithmicColorRamp({
-  //                 // 'lab' is generally the best algorithm for smooth, visually uniform ramps
-  //                 algorithm: "cie-lab", 
-  //                 fromColor: fromColor,
-  //                 toColor: toColor
-  //             })
-  //         );
-  //     }
-
-  //     // The final MultipartColorRamp is composed of all the segments we created.
-  //     return new MultipartColorRamp({
-  //         colorRamps: ramps
-  //     });
-  // }  
-
-  function createStretchRenderer(colorRamp) {
-    return new RasterStretchRenderer({
-        stretchType: "min-max", 
-        colorRamp: colorRamp,
-        dynamicRangeAdjustment: false 
-    });
-  }
-
   /**
    * Creates a MultipartColorRamp from a flat array of hex color codes, with optional positions.
    * @param {string[]} colorHexCodes - An array of hex color strings.
@@ -198,12 +167,18 @@ require([
   function createMinMaxRenderer(min, max, colorRamp) {
       return new RasterStretchRenderer({
           stretchType: "min-max",
+          statistics: [{
+            min: min,
+            max: max,
+            avg: 0.0,
+            stddev: 0.0,
+          }],
           // The values that define the range of the stretch
-          min: min,
-          max: max,
+          // min: min,
+          // max: max,
           // Optional: If you want to clamp output values outside of the min/max range
-          outputMin: min,
-          outputMax: max, 
+          // outputMin: 0,
+          // outputMax: 150, 
           colorRamp: colorRamp,
           dynamicRangeAdjustment: false // Usually set to false when min/max are explicitly defined
       });
@@ -220,8 +195,8 @@ require([
       return new RasterStretchRenderer({
           stretchType: "percent-clip",
           // The percentage of the data distribution to clip from the low and high ends
-          min: minPercent,
-          max: maxPercent,
+          minPercent: minPercent,
+          maxPercent: maxPercent,
           colorRamp: colorRamp,
           dynamicRangeAdjustment: false // Recommended to be false for consistent percentage clips
       });
@@ -246,7 +221,7 @@ require([
     const smokeColorRamp = createManualMultipartColorRamp(bluered10);
 
     if (smokeColorRamp) {
-          const smokeRenderer = createPercentClipRenderer(0.5, 99.5, smokeColorRamp);
+          const smokeRenderer = createPercentClipRenderer(0.5, 0.5, smokeColorRamp);
           smokeLayer.renderer = smokeRenderer;
           console.log("Successfully applied custom MultipartColorRamp.");
       }
@@ -256,12 +231,56 @@ require([
   });
 
   // ============================ ROCKFALL LAYER =============================
+  const rockfallLayer = new ImageryTileLayer({
+    portalItem: { id: ROCKFALL_LAYER_ITEM_ID },
+    opacity: 0.8,
+    visible: false,
+    title: "Rockfall hazard"
+  });
+
+  // APPROACH: CUSTOM COLOR RAMP
+  // Wait for the layer to load to ensure rendering can happen correctly
+  smokeLayer.load().then(() => {
+    // Get the specified Esri Color Ramp
+    const rockfallColorRamp = createManualMultipartColorRamp(rockfall);
+
+    if (rockfallColorRamp) {
+          const rockfallRenderer = createPercentClipRenderer(75, 0.5, rockfallColorRamp);
+          rockfallLayer.renderer = rockfallRenderer;
+          console.log("Successfully applied custom MultipartColorRamp.");
+      }
+
+  }).catch(error => {
+      console.error("Error loading ImageryLayer or applying renderer:", error);
+  });
 
   // ============================ DEBRIS FLOW LAYER =============================
+  const debrisLayer = new ImageryTileLayer({
+    portalItem: { id: DEBRISF_LAYER_ITEM_ID },
+    opacity: 0.8,
+    visible: false,
+    title: "Rockfall hazard"
+  });
+
+  // APPROACH: CUSTOM COLOR RAMP
+  // Wait for the layer to load to ensure rendering can happen correctly
+  smokeLayer.load().then(() => {
+    // Get the specified Esri Color Ramp
+    const debrisColorRamp = createManualMultipartColorRamp(debris);
+
+    if (debrisColorRamp) {
+          const debrisRenderer = createPercentClipRenderer(50, 0.5, debrisColorRamp);
+          debrisLayer.renderer = debrisRenderer;
+          console.log("Successfully applied custom MultipartColorRamp.");
+      }
+
+  }).catch(error => {
+      console.error("Error loading ImageryLayer or applying renderer:", error);
+  });
   // ============================ EXTREME HEAT LAYER =============================
   const lstLayer = new ImageryTileLayer({
     portalItem: { id: LST_LAYER_ITEM_ID },
-    opacity: 1.0,
+    opacity: 0.9,
     visible: false,
     title: "Extreme Heat hazard"
   });
@@ -271,7 +290,7 @@ require([
   lstLayer.load().then(() => {
     // Get the specified Esri Color Ramp
     const lstColorRamp = createManualMultipartColorRamp(inferno);
-    const lstRenderer = createPercentClipRenderer(0.5, 99.5, lstColorRamp);
+    const lstRenderer = createPercentClipRenderer(0.5, 0.5, lstColorRamp);
     lstLayer.renderer = lstRenderer;
     console.log("Successfully applied custom MultipartColorRamp.");
 
@@ -279,10 +298,36 @@ require([
       console.error("Error loading ImageryLayer or applying renderer:", error);
   });
   // ============================ NDVI LAYER =============================
+  const ndviLayer = new ImageryTileLayer({
+    portalItem: { id: NDVI_LAYER_ITEM_ID },
+    opacity: 0.7,
+    visible: false,
+    title: "Drought Susceptibility"
+  });
 
+  // APPROACH: CUSTOM COLOR RAMP
+  // Wait for the layer to load to ensure rendering can happen correctly
+  ndviLayer.load().then(() => {
+    // Get the specified Esri Color Ramp
+    const ndviColorRamp = createManualMultipartColorRamp(dry); //, dry_positions);
+    const ndviRenderer = createMinMaxRenderer(-0.2, 0.2, ndviColorRamp);
+    ndviLayer.renderer = ndviRenderer;
+    console.log("Successfully applied custom MultipartColorRamp.");
+
+  }).catch(error => {
+      console.error("Error loading ImageryLayer or applying renderer:", error);
+  });
   // ============================ FLOOD LAYERS =============================
-  // --- Flood hazard imagery: darker, opaque blue stretch ---
+  // --- Flood protection dikes ---
+  const dikesLayer = new FeatureLayer({
+    portalItem: { id: DIKES_LAYER_ITEM_ID },
+    title: "Flood Protection Dikes Layer",
+    opacity: 1,
+    visible: true,
+    popupEnabled: true
+  });  
 
+  // --- Flood hazard imagery: darker, opaque blue stretch ---
   const floodRenderer = {
     type: "raster-stretch",
     stretchType: "standard-deviation",
@@ -382,7 +427,7 @@ require([
         type: "simple-fill",
         color: [0, 0, 0, 0],
         outline: {
-          color: [30, 64, 175, 1],
+          color: [20, 33, 94, 1],
           width: 1
         }
       }
@@ -393,7 +438,7 @@ require([
 
   const buildingsLayer = new FeatureLayer({
     portalItem: { id: BUILDINGS_ITEM_ID },
-    title: "Buliding Footprints",
+    title: "Building Footprints",
     opacity: 1,
     popupEnabled: true
   });
@@ -402,23 +447,24 @@ require([
 //                        Build layers and toggles
 // ============================================================================
   // Add layers in desired order:
-  //  - flood imagery
-  //  - flood outline
-  //  - neighbourhoods
-  // webmap.addMany([floodLayer, floodExtentLayer, neighbourhoodsLayer]);
-  // webmap.addMany([floodLayer, floodExtentLayer, fireRiskLayer]);
-  webmap.addMany([
-    floodLayer, 
-    floodExtentLayer,
-    lstLayer, 
-    fireThreatLayer,
-    fireRiskLayer,
-    fuelMngdLayer,
-    fuelBreaksLayer,
-    smokeLayer,
+  layerOrder = [
+    buildingsLayer,
     neighbourhoodsLayer, 
-    buildingsLayer
-    ]);
+    smokeLayer,
+
+    rockfallLayer,
+    debrisLayer,
+    fuelBreaksLayer,
+    fuelMngdLayer,
+    fireRiskLayer,
+    fireThreatLayer,
+    lstLayer, 
+    ndviLayer,
+    dikesLayer,
+    floodExtentLayer,
+    floodLayer, 
+    ];
+  webmap.addMany(layerOrder);
 
   // --- View + widgets ---
 
@@ -444,11 +490,19 @@ require([
     });
     view.ui.add(legendExpand, "top-left");
 
+    // -------- Scale Bar -------
     const scaleBar = new ScaleBar({
       view,
-      unit: "metric"
+      unit: "metric",
+      // className: "scaleBar"
     });
-    view.ui.add(scaleBar, "bottom-left");
+    // scaleBar.className = "scaleBar";
+    view.ui.add(scaleBar, "bottom-right");
+    const bottomCenterContainer = document.createElement("div");
+    bottomCenterContainer.className = "bottom-center-scalebar";
+
+    view.ui.add(bottomCenterContainer, "manual");
+    bottomCenterContainer.appendChild(scaleBar.container);
 
     // Zoom to flood extent once it’s ready
     floodLayer.when().then(function () {
@@ -459,103 +513,47 @@ require([
       console.error("Flood layer failed to load:", error);
     });
 
-    // // Zoom to fire threat once it’s ready
-    // floodLayer.when().then(function () {
-    //   if (floodLayer.fullExtent) {
-    //     view.goTo(floodLayer.fullExtent.expand(1.1)).catch(() => {});
-    //   }
-    // }).catch(function (error) {
-    //   console.error("Flood layer failed to load:", error);
-    // });
 
     // -------- Optional: explicitly confirm ordering -------
     webmap.when().then(function () {
-      // very top
-      webmap.reorder(buildingsLayer, webmap.layers.length - 1);      
-      // Neighbourhoods on 
-      webmap.reorder(neighbourhoodsLayer, webmap.layers.length - 2);
-      // Smoke
-      webmap.reorder(smokeLayer, webmap.layers.length - 3);
-      // Fuel breaks
-      webmap.reorder(fuelBreaksLayer, webmap.layers.length - 4);
-      // Fuel managed areas
-      webmap.reorder(fuelMngdLayer, webmap.layers.length - 5);      
-      // Wildfire risk
-      webmap.reorder(fireRiskLayer, webmap.layers.length - 6);
-      // Wildfire threat
-      webmap.reorder(fireThreatLayer, webmap.layers.length - 7);
-      // LST
-      // Flood outline below neighbourhoods
-      webmap.reorder(floodExtentLayer, webmap.layers.length - 8);
-      // Flood raster below both
-      webmap.reorder(floodLayer, webmap.layers.length - 9);
+      layerOrder.forEach((layer, index) => {
+        // webmap.layers.length - 1 is the top position
+        const position = webmap.layers.length - (index + 1);
+        webmap.reorder(layer, position);
+      });
     });
   });
 
   // --- UI toggles ---
-  const buildingsToggle = document.getElementById("buildingsToggle");
-  if (buildingsToggle) {
-    buildingsToggle.addEventListener("change", function (event) {
-      buildingsLayer.visible = event.target.checked;
-    });
-  }
+  const uiMappings = [
+    { id: "buildingsToggle", layers: [buildingsLayer] },
+    { id: "neighbourhoodsToggle", layers: [neighbourhoodsLayer] },
+    { id: "smokeToggle", layers: [smokeLayer] },
+    { id: "rockfallToggle", layers: [rockfallLayer]},
+    { id: "debrisToggle", layers: [debrisLayer]},
+    { id: "fuelBreakToggle", layers: [fuelBreaksLayer, fuelMngdLayer]},
+    { id: "fireRiskToggle", layers: [fireRiskLayer]},
+    { id: "fireThreatToggle", layers: [fireThreatLayer]},
+    { id: "lstToggle", layers: [lstLayer]},
+    { id: "ndviToggle", layers: [ndviLayer]},
+    { id: "dikesToggle", layers: [dikesLayer]},
+    { id: "floodToggle", layers: [floodLayer,floodExtentLayer]}
+  ];  
 
-  const neighbourhoodsToggle = document.getElementById("neighbourhoodsToggle");
-  if (neighbourhoodsToggle) {
-    neighbourhoodsToggle.addEventListener("change", function (event) {
-      neighbourhoodsLayer.visible = event.target.checked;
-    });
-  }
-
-  const smokeToggle = document.getElementById("smokeToggle");
-  if (smokeToggle) {
-    smokeToggle.addEventListener("change", function (event) {
-      smokeLayer.visible = event.target.checked;
-    });
-  }
-
-  // Both fire breaks and managed areas with one toggle
-  const fuelBreakToggle = document.getElementById("fuelBreakToggle");
-  if (fuelBreakToggle) {
-    fuelBreakToggle.addEventListener("change", function (event) {
-      fuelBreaksLayer.visible = event.target.checked;
-      fuelMngdLayer.visible = event.target.checked;
-    });
-  }
-
-  const fireRiskToggle = document.getElementById("fireRiskToggle");
-  if (fireRiskToggle) {
-    fireRiskToggle.addEventListener("change", function (event) {
-      fireRiskLayer.visible = event.target.checked;
-    });
-  }
-
-  const fireThreatToggle = document.getElementById("fireThreatToggle");
-  if (fireThreatToggle) {
-    fireThreatToggle.addEventListener("change", function (event) {
-      fireThreatLayer.visible = event.target.checked;
-    });
-  }
-
-  const lstToggle = document.getElementById("lstToggle");
-  if (lstToggle) {
-    lstToggle.addEventListener("change", function (event) {
-      lstLayer.visible = event.target.checked;
-    });
-  }
-
-  const floodToggle = document.getElementById("floodToggle");
-  if (floodToggle) {
-    floodToggle.addEventListener("change", function (event) {
-      floodLayer.visible = event.target.checked;
-      floodExtentLayer.visible = event.target.checked;
-    });
-  }
-
-  const nhToggle = document.getElementById("neighbourhoodToggle");
-  if (nhToggle) {
-    nhToggle.addEventListener("change", function (event) {
-      neighbourhoodsLayer.visible = event.target.checked;
-    });
-  }
+  uiMappings.forEach(mapping => {
+    const element = document.getElementById(mapping.id);
+    
+    if (element) {
+        element.addEventListener("calciteCheckboxChange", function (event) {
+        const isVisible = event.target.checked;
+        
+        // Loop through all layers associated with this specific toggle
+        mapping.layers.forEach(layer => {
+          if (layer) {
+            layer.visible = isVisible;
+          }
+        });
+      });
+    }
+  });
 });
